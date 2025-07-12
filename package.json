@@ -1,0 +1,153 @@
+{
+  "name": "git-vscode-stats",
+  "displayName": "Git VSCode Stats",
+  "description": "View git repository stats, activity and productivity analysis",
+  "version": "0.1.0",
+  "publisher": "git-quick-stats",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onView:gitQuickStatsView"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitQuickStats.refreshStats",
+        "title": "Refresh Git Stats",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitQuickStats.showDetailedStats",
+        "title": "Show Detailed Git Stats"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByAuthor",
+        "title": "Show Commits by Author"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByHourDay",
+        "title": "Show Commits by Hour/Day"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByHourWeek",
+        "title": "Show Commits by Hour/Week"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByMonth",
+        "title": "Show Commits by Month"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByWeekday",
+        "title": "Show Commits by Weekday"
+      },
+      {
+        "command": "gitQuickStats.showCommitsByYear",
+        "title": "Show Commits by Year"
+      },
+      {
+        "command": "gitQuickStats.showContributorStats",
+        "title": "Show Contributor Stats"
+      },
+      {
+        "command": "gitQuickStats.showBranchStats",
+        "title": "Show Branch Stats"
+      },
+      {
+        "command": "gitQuickStats.showChangelog",
+        "title": "Show Changelog"
+      },
+      {
+        "command": "gitQuickStats.showCodeSuggestors",
+        "title": "Show Code Suggestors"
+      },
+      {
+        "command": "gitQuickStats.showGitEffort",
+        "title": "Show Git Effort"
+      },
+      {
+        "command": "gitQuickStats.showGitActivity",
+        "title": "Show Git Activity"
+      },
+      {
+        "command": "gitQuickStats.showComparison",
+        "title": "Compare Stats Between Branches/Periods"
+      },
+      {
+        "command": "gitQuickStats.showInsights",
+        "title": "Show Git Insights and Recommendations"
+      },
+      {
+        "command": "gitQuickStats.saveConfiguration",
+        "title": "Save Current Configuration"
+      },
+      {
+        "command": "gitQuickStats.loadConfiguration",
+        "title": "Load Saved Configuration"
+      },
+      {
+        "command": "gitQuickStats.saveCustomQuery",
+        "title": "Save Custom Git Query"
+      },
+      {
+        "command": "gitQuickStats.executeCustomQuery",
+        "title": "Execute Custom Git Query"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitQuickStatsContainer",
+          "title": "Git Quick Stats",
+          "icon": "resources/git-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitQuickStatsContainer": [
+        {
+          "id": "gitQuickStatsView",
+          "name": "Git Stats"
+        },
+        {
+          "id": "gitQuickStatsFavorites",
+          "name": "Saved Configurations"
+        },
+        {
+          "id": "gitQuickStatsCustomQueries",
+          "name": "Custom Queries"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitQuickStats.refreshStats",
+          "when": "view == gitQuickStatsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitQuickStats.showDetailedStats",
+          "when": "view == gitQuickStatsView && viewItem == detailedStats"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0",
+    "vscode-test": "^1.6.0"
+  },
+  "dependencies": {
+    "simple-git": "^3.28.0"
+  }
+}
