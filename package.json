@@ -4,6 +4,10 @@
   "description": "View git repository stats, activity and productivity analysis",
   "version": "0.1.0",
   "publisher": "git-quick-stats",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:git-quick-stats/git-vscode-stats.git"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
