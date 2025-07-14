@@ -6,15 +6,11 @@ A lightweight extension and CLI tool that analyzes your Git commits, tracks codi
 
 ### Features
 
-📈 Commit frequency and time-of-day heatmaps
-
-🕒 Daily/weekly/monthly coding activity stats
-
-🧑‍💻 Author-specific stats for collaborative projects
-
-🗃️ Per-branch and per-file metrics
-
-🔌 VS Code integration with live stats
+- Commit frequency and time-of-day heatmaps
+- Daily/weekly/monthly coding activity stats
+- Author-specific stats for collaborative projects
+- Per-branch and per-file metrics
+- VS Code integration with live stats
 
 ### Screenshots
 
