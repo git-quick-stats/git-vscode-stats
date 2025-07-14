@@ -1,4 +1,4 @@
-# Git VSCode Stats Extension
+# [BETA] Git VSCode Stats Extension
 
 _Track and visualize your Git activity directly from VS Code._
 
