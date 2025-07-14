@@ -564,16 +564,7 @@ export class GitStatsWebView {
                 <button class="button" id="show-save-panel">Save Configuration</button>
                 <button class="button" id="show-custom-query">Custom Query</button>
             </div>
-            
-            ${insightsHtml}
-            
-            ${chartHtml}
-            
-            <div id="stats-content">
-                ${htmlContent}
-            </div>
-            
-            ${comparisonHtml}
+
             
             <div id="save-configuration-panel" class="save-panel" style="display: none;">
                 <h2>Save Current Configuration</h2>
@@ -593,6 +584,17 @@ export class GitStatsWebView {
                 <textarea id="query-content" placeholder="git log --format='%h|%an|%ad' --all"></textarea>
                 <button class="button" id="save-query-btn">Save Query</button>
             </div>
+            
+            ${insightsHtml}
+            
+            ${chartHtml}
+            
+            <div id="stats-content">
+                ${htmlContent}
+            </div>
+            
+            ${comparisonHtml}
+            
             
             <script>
                 (function() {

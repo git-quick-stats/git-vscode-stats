@@ -67,10 +67,19 @@ export class GitStatsCommands {
 
     if (filter.dateAfter) {
       args.push("--after=" + filter.dateAfter);
+    } else {
+      // Default to 1 month ago if no dateAfter is provided
+      const dateOneMonthAgo = new Date();
+      dateOneMonthAgo.setMonth(dateOneMonthAgo.getMonth() - 1);
+      args.push("--after=" + dateOneMonthAgo.toISOString().split("T")[0]);
     }
 
     if (filter.dateBefore) {
       args.push("--before=" + filter.dateBefore);
+    } else {
+      // Default to today if no dateBefore is provided
+      const dateToday = new Date();
+      args.push("--before=" + dateToday.toISOString().split("T")[0]);
     }
 
     if (filter.author && filter.author !== "") {
@@ -133,7 +142,7 @@ export class GitStatsCommands {
   }
 
   // Generate insights based on git stats
-  private async generateInsights(): Promise<string[]> {
+  private async generateInsights(filter?: any): Promise<string[]> {
     const insights: string[] = [];
 
     try {
@@ -143,6 +152,7 @@ export class GitStatsCommands {
         '--format="%ad"',
         "--date=format:%u",
         "--all",
+        ...(filter ? this.getDateFilterArgs(filter) : []),
       ]);
 
       const weekdayCounts: Record<string, number> = {
@@ -252,7 +262,7 @@ export class GitStatsCommands {
       const filesStats = await this.git!.raw([
         "log",
         "--name-only",
-        "--pretty=format:",
+        //'--pretty=""',
         "--all",
       ]);
       const files = filesStats.split("\n").filter((file) => file.trim() !== "");
@@ -532,7 +542,6 @@ export class GitStatsCommands {
     }
 
     args = args.concat(filterArgs);
-
     const result = await this.git!.raw(args);
 
     // Format for better display
@@ -656,7 +665,7 @@ export class GitStatsCommands {
       "gitQuickStats.showInsights",
       "Git Insights",
       async (filter) => {
-        const insights = await this.generateInsights();
+        const insights = await this.generateInsights(filter);
 
         // Get some basic stats to display
         const statsResult = await this.git!.raw(["shortlog", "-sn", "--all"]);
@@ -777,7 +786,7 @@ export class GitStatsCommands {
         const filterArgs = this.getDateFilterArgs(filter);
         const args = [
           "log",
-          "--format=format:commit: %H%nDate: %aI%nAuthor: %an <%ae>%nMessage: %s%n",
+          '--format="commit: %H%nDate: %aI%nAuthor: %an <%ae>%nMessage: %s%n"',
           "--numstat",
         ].concat(filterArgs);
 
@@ -830,7 +839,7 @@ export class GitStatsCommands {
         }
 
         // Generate insights
-        const insights = await this.generateInsights();
+        const insights = await this.generateInsights(filter);
 
         // Prepare chart data for file types modified
         const fileTypesData = await this.prepareFileTypesChart(filter);
@@ -847,7 +856,7 @@ export class GitStatsCommands {
 
   private async prepareFileTypesChart(filter: any): Promise<ChartData> {
     const filterArgs = this.getDateFilterArgs(filter);
-    const args = ["log", "--name-only", '--format=""'].concat(filterArgs);
+    const args = ["log", "--name-only" /*, '--format=""'*/].concat(filterArgs);
 
     const result = await this.git!.raw(args);
 
@@ -905,7 +914,6 @@ export class GitStatsCommands {
       async (filter) => {
         const filterArgs = this.getDateFilterArgs(filter);
         const args = ["shortlog", "-sn", "--no-merges"].concat(filterArgs);
-
         const result = await this.git!.raw(args);
 
         // Format for better display
@@ -951,7 +959,7 @@ export class GitStatsCommands {
         }
 
         // Generate insights
-        const insights = await this.generateInsights();
+        const insights = await this.generateInsights(filter);
 
         return {
           content,
@@ -1133,7 +1141,7 @@ export class GitStatsCommands {
         };
 
         // Generate insights
-        const insights = await this.generateInsights();
+        const insights = await this.generateInsights(filter);
 
         return {
           content,
@@ -1449,6 +1457,442 @@ export class GitStatsCommands {
           insights,
         };
       }
+    );
+  }
+
+  async showCommitsByWeekday(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showCommitsByWeekday",
+      "Commits by Weekday",
+      async (filter) => {
+        const filterArgs = this.getDateFilterArgs(filter);
+        const args = [
+          "log",
+          '--format="%H|%ad"',
+          "--date=format-local:%u",
+          "--all",
+        ].concat(filterArgs);
+
+        const result = await this.git!.raw(args);
+
+        // Process the data to get weekday frequency
+        const weekdays = result
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .map((line) => {
+            const parts = line.split("|");
+            if (parts.length >= 2) {
+              return parts[1].replace(/"/g, "");
+            }
+            return "";
+          })
+          .filter((weekday) => weekday !== "");
+
+        const weekdayCounts: Record<string, number> = {};
+
+        // Initialize counts for each weekday
+        for (let i = 1; i <= 7; i++) {
+          weekdayCounts[i.toString()] = 0;
+        }
+
+        weekdays.forEach((weekday) => {
+          if (weekdayCounts[weekday] !== undefined) {
+            weekdayCounts[weekday]++;
+          }
+        });
+
+        let content = "Weekday | Commits\n";
+        content += "--------|--------\n";
+
+        for (let i = 1; i <= 7; i++) {
+          content += `${i} | ${weekdayCounts[i.toString()]}\n`;
+        }
+
+        // Generate insights about weekly activity
+        const insights = [];
+        const mostActiveWeekday = Object.entries(weekdayCounts).reduce(
+          (max, [key, count]) => {
+            if (count > max.count) {
+              return { day: key, count };
+            }
+            return max;
+          },
+          { day: "", count: 0 }
+        );
+        insights.push(
+          `Most active weekday is ${mostActiveWeekday.day} with ${mostActiveWeekday.count} commits.`
+        );
+        const totalCommits = Object.values(weekdayCounts).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        insights.push(`Total commits in period: ${totalCommits}.`);
+        insights.push(
+          `Average commits per weekday: ${(totalCommits / 7).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per day: ${(totalCommits / 7).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per hour of day: ${(totalCommits / 168).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per hour of week: ${(totalCommits / 168).toFixed(
+            2
+          )}.`
+        );
+        // Create chart data
+        const chartData: ChartData = {
+          type: "bar",
+          data: {
+            labels: Object.keys(weekdayCounts).map((day) => `Day ${day}`),
+            datasets: [
+              {
+                label: "Commits by Weekday",
+                data: Object.values(weekdayCounts),
+                backgroundColor: "rgba(75, 192, 192, 0.2)",
+                borderColor: "rgba(75, 192, 192, 1)",
+                borderWidth: 1,
+              },
+            ],
+          },
+        };
+        return {
+          content,
+          chartData,
+          insights,
+        };
+      }
+    );
+  }
+
+  async showCommitsByYear(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showCommitsByYear",
+      "Commits by Year",
+      async (filter) => {
+        const filterArgs = this.getDateFilterArgs(filter);
+        const args = [
+          "log",
+          '--format="%H|%ad"',
+          "--date=format-local:%Y",
+          "--all",
+        ].concat(filterArgs);
+
+        const result = await this.git!.raw(args);
+
+        // Process the data to get year frequency
+        const years = result
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .map((line) => {
+            const parts = line.split("|");
+            if (parts.length >= 2) {
+              return parts[1].replace(/"/g, "");
+            }
+            return "";
+          })
+          .filter((year) => year !== "");
+
+        const yearCounts: Record<string, number> = {};
+
+        years.forEach((year) => {
+          if (!yearCounts[year]) {
+            yearCounts[year] = 0;
+          }
+          yearCounts[year]++;
+        });
+
+        let content = "Year | Commits\n";
+        content += "-----|--------\n";
+
+        Object.entries(yearCounts).forEach(([year, count]) => {
+          content += `${year} | ${count}\n`;
+        });
+
+        // Create chart data
+        const chartData: ChartData = {
+          type: "bar",
+          data: {
+            labels: Object.keys(yearCounts),
+            datasets: [
+              {
+                label: "Commits by Year",
+                data: Object.values(yearCounts),
+                backgroundColor: "rgba(153, 102, 255, 0.2)",
+                borderColor: "rgba(153, 102, 255, 1)",
+                borderWidth: 2,
+              },
+            ],
+          },
+        };
+
+        // Generate insights about yearly activity
+        const insights = [];
+        const mostActiveYear = Object.entries(yearCounts).reduce(
+          (max, [key, count]) => {
+            if (count > max.count) {
+              return { year: key, count };
+            }
+            return max;
+          },
+          { year: "", count: 0 }
+        );
+        insights.push(
+          `Most active year is ${mostActiveYear.year} with ${mostActiveYear.count} commits.`
+        );
+        const totalCommits = Object.values(yearCounts).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        insights.push(`Total commits in period: ${totalCommits}.`);
+        insights.push(
+          `Average commits per year: ${(
+            totalCommits / Object.keys(yearCounts).length
+          ).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per month: ${(
+            totalCommits /
+            (Object.keys(yearCounts).length * 12)
+          ).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per day: ${(
+            totalCommits /
+            (Object.keys(yearCounts).length * 365)
+          ).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per hour of day: ${(
+            totalCommits /
+            (Object.keys(yearCounts).length * 8760)
+          ).toFixed(2)}.`
+        );
+        insights.push(
+          `Average commits per hour of week: ${(
+            totalCommits /
+            (Object.keys(yearCounts).length * 8760)
+          ).toFixed(2)}.`
+        );
+        return {
+          content,
+          chartData,
+          insights,
+        };
+      }
+    );
+  }
+
+  async showContributorStats(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showContributorStats",
+      "Contributor Stats",
+      async (filter) => {
+        const filterArgs = this.getDateFilterArgs(filter);
+        const args = ["shortlog", "-sn", "--no-merges"].concat(filterArgs);
+
+        const result = await this.git!.raw(args);
+
+        // Format for better display
+        const lines = result.split("\n").filter((line) => line.trim() !== "");
+
+        let content = "Author | Commits\n";
+        content += "-------|--------\n";
+
+        const chartData: ChartData = {
+          type: "bar",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Commits by Author",
+                data: [],
+                backgroundColor: "rgba(54, 162, 235, 0.6)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1,
+              },
+            ],
+          },
+        };
+
+        for (const line of lines) {
+          const match = line.match(/^\s*(\d+)\s+(.+)$/);
+          if (match) {
+            const commits = match[1];
+            const author = match[2];
+            content += `${author} | ${commits}\n`;
+
+            // Add to chart data
+            chartData.data.labels.push(author);
+            chartData.data.datasets[0].data.push(parseInt(commits, 10));
+          }
+        }
+
+        // Limit to top 10 authors for chart readability
+        if (chartData.data.labels.length > 10) {
+          chartData.data.labels = chartData.data.labels.slice(0, 10);
+          chartData.data.datasets[0].data =
+            chartData.data.datasets[0].data.slice(0, 10);
+        }
+
+        // Generate insights
+        const insights = await this.generateInsights(filter);
+
+        return {
+          content,
+          chartData,
+          insights,
+        };
+      },
+      filter
+    );
+  }
+
+  // Show Branch Stats for all branches with visualization
+  async showBranchStats(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showBranchStats",
+      "Branch Stats",
+      async () => {
+        const branchResult = await this.git!.branch();
+        const allBranches = branchResult.all;
+
+        // Map: branch -> commit count
+        const branchStats: Record<string, number> = {};
+
+        for (const branch of allBranches) {
+          try {
+            // Get commit count for branch
+            const commitCount = await this.git!.raw([
+              "rev-list",
+              "--count",
+              branch,
+            ]);
+            branchStats[branch] = Number(commitCount.trim());
+          } catch {
+            branchStats[branch] = 0;
+          }
+        }
+
+        // Prepare table content
+        let content = "Branch | Commits\n";
+        content += "-------|--------\n";
+        Object.entries(branchStats)
+          .sort(([, a], [, b]) => b - a)
+          .forEach(([branch, count]) => {
+            content += `${branch} | ${count}\n`;
+          });
+
+        // Prepare chart data (top 10 branches by commits)
+        const topBranches = Object.entries(branchStats)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10);
+
+        const chartData = {
+          type: "bar" as const,
+          data: {
+            labels: topBranches.map(([branch]) => branch),
+            datasets: [
+              {
+                label: "Commit Count",
+                data: topBranches.map(([, count]) => count),
+                backgroundColor: "rgba(54, 162, 235, 0.6)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1,
+              },
+            ],
+          },
+        };
+
+        const insights = [
+          `Branch with most commits: ${topBranches[0]?.[0]} (${
+            topBranches[0]?.[1] ?? 0
+          } commits)`,
+          `Total branches: ${allBranches.length}`,
+        ];
+
+        return {
+          content,
+          chartData,
+          insights,
+        };
+      },
+      filter
+    );
+  }
+
+  async showChangelog(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showChangelog",
+      "Changelog",
+      async (filter) => {
+        const filterArgs = this.getDateFilterArgs(filter);
+        const args = ["log", '--format="%h %s (%an, %ar)"'].concat(filterArgs);
+
+        const result = await this.git!.raw(args);
+
+        // Format for better display
+        const lines = result.split("\n").filter((line) => line.trim() !== "");
+
+        let content = "Commit | Message | Author | Date\n";
+        content += "-------|---------|--------|-----\n";
+
+        lines.forEach((line) => {
+          const parts = line.split(" ");
+          const commitHash = parts[0];
+          const message = parts.slice(1, -2).join(" ");
+          const author = parts[parts.length - 2];
+          const date = parts[parts.length - 1];
+          content += `${commitHash} | ${message} | ${author} | ${date}\n`;
+        });
+
+        // Generate insights
+        const insights = await this.generateInsights(filter);
+
+        return {
+          content,
+          insights,
+        };
+      },
+      filter
+    );
+  }
+
+  async showCodeSuggestors(filter: any = {}): Promise<void> {
+    await this.executeCommand(
+      "gitQuickStats.showCodeSuggestors",
+      "Code Suggestors",
+      async (filter) => {
+        const filterArgs = this.getDateFilterArgs(filter);
+        const args = ["log", '--format="%h %s (%an, %ar)"'].concat(filterArgs);
+
+        const result = await this.git!.raw(args);
+
+        // Format for better display
+        const lines = result.split("\n").filter((line) => line.trim() !== "");
+
+        let content = "Commit | Message | Author | Date\n";
+        content += "-------|---------|--------|-----\n";
+
+        lines.forEach((line) => {
+          const parts = line.split(" ");
+          const commitHash = parts[0];
+          const message = parts.slice(1, -2).join(" ");
+          const author = parts[parts.length - 2];
+          const date = parts[parts.length - 1];
+          content += `${commitHash} | ${message} | ${author} | ${date}\n`;
+        });
+
+        // Generate insights
+        const insights = await this.generateInsights(filter);
+
+        return {
+          content,
+          insights,
+        };
+      },
+      filter
     );
   }
 }

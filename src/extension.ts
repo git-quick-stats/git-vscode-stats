@@ -67,34 +67,34 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "gitQuickStats.showCommitsByWeekday",
       (filter) => {
-        // gitStatsCommands.showCommitsByWeekday(filter);
+        gitStatsCommands.showCommitsByWeekday(filter);
       }
     ),
     vscode.commands.registerCommand(
       "gitQuickStats.showCommitsByYear",
       (filter) => {
-        //  gitStatsCommands.showCommitsByYear(filter);
+        gitStatsCommands.showCommitsByYear(filter);
       }
     ),
     vscode.commands.registerCommand(
       "gitQuickStats.showContributorStats",
       (filter) => {
-        // gitStatsCommands.showContributorStats(filter);
+        gitStatsCommands.showContributorStats(filter);
       }
     ),
     vscode.commands.registerCommand(
       "gitQuickStats.showBranchStats",
       (filter) => {
-        // gitStatsCommands.showBranchStats(filter);
+        gitStatsCommands.showBranchStats(filter);
       }
     ),
     vscode.commands.registerCommand("gitQuickStats.showChangelog", (filter) => {
-      //gitStatsCommands.showChangelog(filter);
+      gitStatsCommands.showChangelog(filter);
     }),
     vscode.commands.registerCommand(
       "gitQuickStats.showCodeSuggestors",
       (filter) => {
-        // gitStatsCommands.showCodeSuggestors(filter);
+        gitStatsCommands.showCodeSuggestors(filter);
       }
     ),
     vscode.commands.registerCommand("gitQuickStats.showGitEffort", (filter) => {
