@@ -32,7 +32,7 @@ git clone https://github.com/git-quick-stats/git-vscode-stats.git
 
 Or install via VS Code Marketplace.
 
-`@tbd`
+https://marketplace.visualstudio.com/items?itemName=git-quick-stats.git-vscode-stats
 
 ### Development
 
