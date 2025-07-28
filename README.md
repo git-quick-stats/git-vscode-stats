@@ -14,11 +14,13 @@ A lightweight extension and CLI tool that analyzes your Git commits, tracks codi
 
 ### Screenshots
 
-<img width="1703" height="1348" alt="img1" src="https://github.com/user-attachments/assets/0b93b49f-307d-48d5-84dc-d14136715a54" />
+<center>
+<img width="600" height="auto" alt="img1" src="https://github.com/user-attachments/assets/0b93b49f-307d-48d5-84dc-d14136715a54" />
 
-<br><br>
+<br>
 
-<img width="1701" height="1345" alt="img2" src="https://github.com/user-attachments/assets/d0f9d148-6f4b-44f5-a50b-16496519a75e" />
+<img width="600" height="auto" alt="img2" src="https://github.com/user-attachments/assets/d0f9d148-6f4b-44f5-a50b-16496519a75e" />
+</center>
 
 ### Installation
 
