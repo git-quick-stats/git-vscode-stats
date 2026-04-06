@@ -167,8 +167,7 @@
   "devDependencies": {
     "@types/node": "^24.0.10",
     "@types/vscode": "^1.80.0",
-    "typescript": "^5.0.0",
-    "vscode-test": "^1.6.0"
+    "typescript": "^5.0.0"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
