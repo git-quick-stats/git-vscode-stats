@@ -2,7 +2,7 @@
   "name": "git-vscode-stats",
   "displayName": "Git VSCode Stats",
   "description": "View git repository stats, activity and productivity analysis",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "git-quick-stats",
   "icon": "resources/icon.png",
   "repository": {
