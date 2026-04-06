@@ -10,7 +10,7 @@ import {
 
 export function activate(context: vscode.ExtensionContext) {
   const gitStatsProvider = new GitStatsProvider();
-  const gitStatsCommands = new GitStatsCommands();
+  const gitStatsCommands = new GitStatsCommands(context.extensionUri);
   const savedConfigsProvider = new SavedConfigurationsProvider(context);
   const customQueriesProvider = new CustomQueriesProvider(context);
 

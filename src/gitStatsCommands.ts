@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import { simpleGit, SimpleGit } from "simple-git";
 import { GitStatsWebView, ChartData } from "./webviewPanel";
 import { CustomQuery } from "./savedConfigsProvider";
@@ -7,8 +6,21 @@ import { CustomQuery } from "./savedConfigsProvider";
 export class GitStatsCommands {
   private git: SimpleGit | undefined;
   private authors: string[] = [];
+  private readonly allowedCustomQueryCommands = new Set<string>([
+    "log",
+    "shortlog",
+    "show",
+    "rev-list",
+    "diff",
+    "branch",
+    "tag",
+    "ls-files",
+    "blame",
+    "for-each-ref",
+    "status",
+  ]);
 
-  constructor() {
+  constructor(private readonly extensionUri: vscode.Uri) {
     this.initGit();
   }
 
@@ -64,9 +76,12 @@ export class GitStatsCommands {
 
   private getDateFilterArgs(filter: any) {
     const args = [];
+    const sanitizedAfter = this.sanitizeDateValue(filter?.dateAfter);
+    const sanitizedBefore = this.sanitizeDateValue(filter?.dateBefore);
+    const sanitizedAuthor = this.sanitizeAuthorValue(filter?.author);
 
-    if (filter.dateAfter) {
-      args.push("--after=" + filter.dateAfter);
+    if (sanitizedAfter) {
+      args.push("--after=" + sanitizedAfter);
     } else {
       // Default to 1 month ago if no dateAfter is provided
       const dateOneMonthAgo = new Date();
@@ -74,19 +89,118 @@ export class GitStatsCommands {
       args.push("--after=" + dateOneMonthAgo.toISOString().split("T")[0]);
     }
 
-    if (filter.dateBefore) {
-      args.push("--before=" + filter.dateBefore);
+    if (sanitizedBefore) {
+      args.push("--before=" + sanitizedBefore);
     } else {
       // Default to today if no dateBefore is provided
       const dateToday = new Date();
       args.push("--before=" + dateToday.toISOString().split("T")[0]);
     }
 
-    if (filter.author && filter.author !== "") {
-      args.push("--author=" + filter.author);
+    if (sanitizedAuthor) {
+      args.push("--author=" + sanitizedAuthor);
     }
 
     return args;
+  }
+
+  private sanitizeDateValue(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return undefined;
+    }
+
+    return trimmed;
+  }
+
+  private sanitizeAuthorValue(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    if (trimmed.length > 120) {
+      return trimmed.slice(0, 120);
+    }
+
+    return trimmed.replace(/[\r\n\0]/g, " ");
+  }
+
+  private tokenizeCustomQuery(input: string): string[] {
+    const tokens: string[] = [];
+    let current = "";
+    let quote: "\"" | "'" | null = null;
+    let escaped = false;
+
+    for (const char of input) {
+      if (escaped) {
+        current += char;
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if ((char === "\"" || char === "'") && !quote) {
+        quote = char as "\"" | "'";
+        continue;
+      }
+
+      if (quote && char === quote) {
+        quote = null;
+        continue;
+      }
+
+      if (!quote && /\s/.test(char)) {
+        if (current) {
+          tokens.push(current);
+          current = "";
+        }
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current) {
+      tokens.push(current);
+    }
+
+    return tokens;
+  }
+
+  private isSafeCustomQuery(args: string[]): boolean {
+    if (args.length === 0 || args.length > 40) {
+      return false;
+    }
+
+    const command = args[0].toLowerCase();
+    if (!this.allowedCustomQueryCommands.has(command)) {
+      return false;
+    }
+
+    for (const arg of args.slice(1)) {
+      if (arg.startsWith("-c") || arg.startsWith("--config")) {
+        return false;
+      }
+
+      if (arg.includes("\0") || /[\r\n]/.test(arg)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private async executeCommand(
@@ -120,7 +234,7 @@ export class GitStatsCommands {
 
           // Get the webview panel and update content
           const webviewPanel = GitStatsWebView.createOrShow(
-            vscode.Uri.file(vscode.workspace.workspaceFolders![0].uri.fsPath),
+            this.extensionUri,
             title
           );
           webviewPanel.updateContent(
@@ -312,7 +426,14 @@ export class GitStatsCommands {
         async (progress) => {
           progress.report({ increment: 0 });
 
-          const queryParts = query.query.split(" ");
+          const queryParts = this.tokenizeCustomQuery(query.query);
+          if (!this.isSafeCustomQuery(queryParts)) {
+            vscode.window.showErrorMessage(
+              "Blocked custom query. Only read-only git commands are allowed."
+            );
+            return;
+          }
+
           const result = await this.git!.raw(queryParts);
 
           // Format the output in a table if possible
@@ -338,7 +459,7 @@ export class GitStatsCommands {
 
           // Get the webview panel and update content
           const webviewPanel = GitStatsWebView.createOrShow(
-            vscode.Uri.file(vscode.workspace.workspaceFolders![0].uri.fsPath),
+            this.extensionUri,
             `Custom Query: ${query.name}`
           );
           webviewPanel.updateContent(
@@ -492,7 +613,7 @@ export class GitStatsCommands {
 
           // Get the webview panel and update content with comparison view
           const webviewPanel = GitStatsWebView.createOrShow(
-            vscode.Uri.file(vscode.workspace.workspaceFolders![0].uri.fsPath),
+            this.extensionUri,
             `Comparing ${sourceName} vs ${targetName}`
           );
           webviewPanel.updateContent(
@@ -906,6 +1027,23 @@ export class GitStatsCommands {
     };
   }
 
+  private buildCommitsByAuthorInsights(
+    rows: Array<{ author: string; commits: number }>
+  ): string[] {
+    if (rows.length === 0) {
+      return ["No commits found for the selected filter."];
+    }
+
+    const totalCommits = rows.reduce((sum, row) => sum + row.commits, 0);
+    const top = rows[0];
+    const share = ((top.commits / Math.max(totalCommits, 1)) * 100).toFixed(1);
+
+    return [
+      `Top contributor is ${top.author} with ${top.commits} commits (${share}% of filtered commits).`,
+      `Found ${rows.length} active contributor(s) and ${totalCommits} total commit(s) in the selected range.`,
+    ];
+  }
+
   // Show Commits by Author
   async showCommitsByAuthor(filter: any = {}): Promise<void> {
     await this.executeCommand(
@@ -918,6 +1056,7 @@ export class GitStatsCommands {
 
         // Format for better display
         const lines = result.split("\n").filter((line) => line.trim() !== "");
+        const rows: Array<{ author: string; commits: number }> = [];
 
         let content = "Author | Commits\n";
         content += "-------|--------\n";
@@ -941,13 +1080,14 @@ export class GitStatsCommands {
         for (const line of lines) {
           const match = line.match(/^\s*(\d+)\s+(.+)$/);
           if (match) {
-            const commits = match[1];
+            const commits = parseInt(match[1], 10);
             const author = match[2];
             content += `${author} | ${commits}\n`;
+            rows.push({ author, commits });
 
             // Add to chart data
             chartData.data.labels.push(author);
-            chartData.data.datasets[0].data.push(parseInt(commits, 10));
+            chartData.data.datasets[0].data.push(commits);
           }
         }
 
@@ -958,8 +1098,7 @@ export class GitStatsCommands {
             chartData.data.datasets[0].data.slice(0, 10);
         }
 
-        // Generate insights
-        const insights = await this.generateInsights(filter);
+        const insights = this.buildCommitsByAuthorInsights(rows);
 
         return {
           content,

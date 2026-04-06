@@ -161,7 +161,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "node --test test/**/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^24.0.10",
@@ -170,6 +171,7 @@
     "vscode-test": "^1.6.0"
   },
   "dependencies": {
+    "chart.js": "^4.5.1",
     "simple-git": "^3.28.0"
   }
 }

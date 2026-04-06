@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import * as fs from "fs";
+import { randomBytes } from "crypto";
 
 export interface ChartData {
   type: "bar" | "line" | "pie" | "doughnut";
@@ -39,6 +39,24 @@ export class GitStatsWebView {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
+  private readonly _allowedStatsCommands = new Set<string>([
+    "gitQuickStats.showDetailedStats",
+    "gitQuickStats.showCommitsByAuthor",
+    "gitQuickStats.showCommitsByHourDay",
+    "gitQuickStats.showCommitsByHourWeek",
+    "gitQuickStats.showCommitsByMonth",
+    "gitQuickStats.showCommitsByWeekday",
+    "gitQuickStats.showCommitsByYear",
+    "gitQuickStats.showContributorStats",
+    "gitQuickStats.showBranchStats",
+    "gitQuickStats.showChangelog",
+    "gitQuickStats.showCodeSuggestors",
+    "gitQuickStats.showGitEffort",
+    "gitQuickStats.showGitActivity",
+    "gitQuickStats.showComparison",
+    "gitQuickStats.showInsights",
+    "gitQuickStats.executeCustomQuery",
+  ]);
 
   public static createOrShow(extensionUri: vscode.Uri, title: string) {
     const column = vscode.window.activeTextEditor
@@ -59,7 +77,10 @@ export class GitStatsWebView {
       column || vscode.ViewColumn.One,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "media")],
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, "media"),
+          vscode.Uri.joinPath(extensionUri, "node_modules", "chart.js", "dist"),
+        ],
       }
     );
 
@@ -78,27 +99,58 @@ export class GitStatsWebView {
     // Handle messages from the webview
     this._panel.webview.onDidReceiveMessage(
       (message) => {
+        if (!message || typeof message.command !== "string") {
+          return;
+        }
+
         switch (message.command) {
-          case "filterChanged":
+          case "filterChanged": {
+            if (!this.isAllowedStatsCommand(message.statsCommand)) {
+              return;
+            }
             vscode.commands.executeCommand(message.statsCommand, {
-              dateAfter: message.dateAfter,
-              dateBefore: message.dateBefore,
-              author: message.author,
+              dateAfter:
+                typeof message.dateAfter === "string" ? message.dateAfter : "",
+              dateBefore:
+                typeof message.dateBefore === "string"
+                  ? message.dateBefore
+                  : "",
+              author: typeof message.author === "string" ? message.author : "",
             });
             return;
+          }
           case "export":
-            this.handleExport(message.format, message.title, message.data);
+            if (
+              typeof message.format === "string" &&
+              typeof message.title === "string" &&
+              typeof message.data === "string"
+            ) {
+              this.handleExport(message.format, message.title, message.data);
+            }
             return;
           case "saveConfiguration":
+            if (!this.isAllowedStatsCommand(message.statsCommand)) {
+              return;
+            }
             vscode.commands.executeCommand("gitQuickStats.saveConfiguration", {
-              name: message.name,
+              name: typeof message.name === "string" ? message.name : "",
               statsCommand: message.statsCommand,
-              dateAfter: message.dateAfter,
-              dateBefore: message.dateBefore,
-              author: message.author,
+              dateAfter:
+                typeof message.dateAfter === "string" ? message.dateAfter : "",
+              dateBefore:
+                typeof message.dateBefore === "string"
+                  ? message.dateBefore
+                  : "",
+              author: typeof message.author === "string" ? message.author : "",
             });
             return;
           case "saveCustomQuery":
+            if (
+              typeof message.name !== "string" ||
+              typeof message.query !== "string"
+            ) {
+              return;
+            }
             vscode.commands.executeCommand("gitQuickStats.saveCustomQuery", {
               name: message.name,
               query: message.query,
@@ -109,6 +161,10 @@ export class GitStatsWebView {
       null,
       this._disposables
     );
+  }
+
+  private isAllowedStatsCommand(command: unknown): command is string {
+    return typeof command === "string" && this._allowedStatsCommands.has(command);
   }
 
   public updateContent(
@@ -149,9 +205,19 @@ export class GitStatsWebView {
 
   private async handleExport(format: string, title: string, data: string) {
     try {
+      const normalizedFormat = format.toLowerCase();
+      if (!["csv", "json", "html"].includes(normalizedFormat)) {
+        vscode.window.showErrorMessage("Unsupported export format.");
+        return;
+      }
+
+      const safeFileName = title
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .slice(0, 120);
+
       const options = {
-        defaultUri: vscode.Uri.file(`${title.replace(/\s+/g, "_")}.${format}`),
-        filters: { [format.toUpperCase()]: [format] },
+        defaultUri: vscode.Uri.file(`${safeFileName}.${normalizedFormat}`),
+        filters: { [normalizedFormat.toUpperCase()]: [normalizedFormat] },
       };
 
       const fileUri = await vscode.window.showSaveDialog(options);
@@ -159,7 +225,7 @@ export class GitStatsWebView {
       if (fileUri) {
         let content = "";
 
-        switch (format) {
+        switch (normalizedFormat) {
           case "csv":
             content = this.convertToCSV(data);
             break;
@@ -246,10 +312,11 @@ export class GitStatsWebView {
   }
 
   private convertToHTML(title: string, data: string): string {
+    const safeTitle = this.escapeHtml(title);
     return `<!DOCTYPE html>
         <html>
         <head>
-            <title>${title}</title>
+        <title>${safeTitle}</title>
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; }
                 h1 { color: #333; }
@@ -259,10 +326,114 @@ export class GitStatsWebView {
             </style>
         </head>
         <body>
-            <h1>${title}</h1>
+            <h1>${safeTitle}</h1>
             <div>${data}</div>
         </body>
         </html>`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  private safeJson(value: unknown): string {
+    return JSON.stringify(value)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e")
+      .replace(/&/g, "\\u0026")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029");
+  }
+
+  private renderTabularContent(content: string): string {
+    if (content.includes("|")) {
+      const rows = content.split("\n").filter((row) => row.trim() !== "");
+
+      if (rows.length > 0) {
+        let html = '<table class="stats-table">';
+
+        const headerCells = rows[0]
+          .split("|")
+          .map((cell) => `<th>${this.escapeHtml(cell.trim())}</th>`)
+          .join("");
+        html += `<tr>${headerCells}</tr>`;
+
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i].includes("-|-") || rows[i].match(/^[-|]+$/)) {
+            continue;
+          }
+
+          const cells = rows[i]
+            .split("|")
+            .map((cell) => `<td>${this.escapeHtml(cell.trim())}</td>`)
+            .join("");
+          html += `<tr>${cells}</tr>`;
+        }
+
+        html += "</table>";
+        return html;
+      }
+    }
+
+    return `<pre>${this.escapeHtml(content)}</pre>`;
+  }
+
+  private renderInsights(insights?: string[] | null): string {
+    if (!insights || insights.length === 0) {
+      return "";
+    }
+
+    return `
+            <div class="insights-panel">
+                <h2>Git Insights</h2>
+                <ul>
+                    ${insights
+                      .map((insight) => `<li>${this.escapeHtml(insight)}</li>`)
+                      .join("")}
+                </ul>
+            </div>`;
+  }
+
+  private renderComparison(
+    comparisonMode: boolean,
+    comparisonData: any
+  ): string {
+    if (!comparisonMode || !comparisonData) {
+      return "";
+    }
+
+    const sourceTitle = this.escapeHtml(comparisonData.source?.title ?? "");
+    const targetTitle = this.escapeHtml(comparisonData.target?.title ?? "");
+    const sourceContent = this.renderTabularContent(
+      String(comparisonData.source?.content ?? "")
+    );
+    const targetContent = this.renderTabularContent(
+      String(comparisonData.target?.content ?? "")
+    );
+
+    return `
+            <div class="comparison-container">
+                <h2>Comparison View</h2>
+                <div class="comparison-section">
+                    <div class="comparison-column">
+                        <h3>${sourceTitle}</h3>
+                        <div>${sourceContent}</div>
+                    </div>
+                    <div class="comparison-column">
+                        <h3>${targetTitle}</h3>
+                        <div>${targetContent}</div>
+                    </div>
+                </div>
+            </div>`;
+  }
+
+  private getNonce(): string {
+    return randomBytes(16).toString("base64");
   }
 
   private _getHtmlForWebview(
@@ -278,92 +449,32 @@ export class GitStatsWebView {
     comparisonMode: boolean = false,
     comparisonData?: any
   ) {
-    // Process content to HTML based on format (detect if it's a table)
-    let htmlContent = "";
-
-    if (content.includes("|")) {
-      // Convert pipe-delimited content to HTML table
-      const rows = content.split("\n").filter((row) => row.trim() !== "");
-
-      if (rows.length > 0) {
-        htmlContent = '<table class="stats-table">';
-
-        // Header row
-        const headerCells = rows[0]
-          .split("|")
-          .map((cell) => `<th>${cell.trim()}</th>`)
-          .join("");
-        htmlContent += `<tr>${headerCells}</tr>`;
-
-        // Separator row (if exists)
-        if (rows.length > 1 && rows[1].includes("-")) {
-          // Skip separator row
-        }
-
-        // Data rows
-        for (let i = 1; i < rows.length; i++) {
-          if (rows[i].includes("-|-") || rows[i].match(/^[-|]+$/)) {
-            continue; // Skip separator rows
-          }
-
-          const cells = rows[i]
-            .split("|")
-            .map((cell) => `<td>${cell.trim()}</td>`)
-            .join("");
-          htmlContent += `<tr>${cells}</tr>`;
-        }
-
-        htmlContent += "</table>";
-      }
-    } else {
-      // Just format as pre
-      htmlContent = `<pre>${content}</pre>`;
-    }
-
-    // Generate comparison view if in comparison mode
-    let comparisonHtml = "";
-    if (comparisonMode && comparisonData) {
-      comparisonHtml = `
-            <div class="comparison-container">
-                <h2>Comparison View</h2>
-                <div class="comparison-section">
-                    <div class="comparison-column">
-                        <h3>${comparisonData.source.title}</h3>
-                        <div>${comparisonData.source.content}</div>
-                    </div>
-                    <div class="comparison-column">
-                        <h3>${comparisonData.target.title}</h3>
-                        <div>${comparisonData.target.content}</div>
-                    </div>
-                </div>
-            </div>`;
-    }
-
-    // Generate insights section if insights are provided
-    let insightsHtml = "";
-    if (insights && insights.length > 0) {
-      insightsHtml = `
-            <div class="insights-panel">
-                <h2>📊 Git Insights</h2>
-                <ul>
-                    ${insights.map((insight) => `<li>${insight}</li>`).join("")}
-                </ul>
-            </div>`;
-    }
-
-    // Generate chart section if chart data is provided
-    let chartHtml = "";
-    if (chartData) {
-      const chartId = `chart-${Math.random().toString(36).substring(2, 15)}`;
-      chartHtml = `
+    const nonce = this.getNonce();
+    const chartJsUri = this._panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this._extensionUri,
+        "node_modules",
+        "chart.js",
+        "dist",
+        "chart.umd.js"
+      )
+    );
+    const safeTitle = this.escapeHtml(title);
+    const htmlContent = this.renderTabularContent(content);
+    const comparisonHtml = this.renderComparison(comparisonMode, comparisonData);
+    const insightsHtml = this.renderInsights(insights);
+    const chartHtml = chartData
+      ? `
             <div class="chart-container">
-                <canvas id="${chartId}" width="640" height="280"></canvas>
-                <script>
-                    const ctx = document.getElementById('${chartId}');
-                    new Chart(ctx, ${JSON.stringify(chartData)});
-                </script>
-            </div>`;
-    }
+                <canvas id="stats-chart" width="640" height="280"></canvas>
+            </div>`
+      : "";
+
+    const state = {
+      statsCommand,
+      title,
+      chartData: chartData ?? null,
+    };
 
     // Construct the full HTML content
     return `<!DOCTYPE html>
@@ -371,8 +482,9 @@ export class GitStatsWebView {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${title}</title>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${this._panel.webview.cspSource} data:; style-src ${this._panel.webview.cspSource} 'unsafe-inline'; script-src ${this._panel.webview.cspSource} 'nonce-${nonce}';">
+            <title>${safeTitle}</title>
+        <script nonce="${nonce}" src="${chartJsUri}"></script>
             <style>
                 body {
                     font-family: var(--vscode-font-family);
@@ -529,16 +641,16 @@ export class GitStatsWebView {
             </style>
         </head>
         <body>
-            <h1>${title}</h1>
+              <h1>${safeTitle}</h1>
             
             <div class="filter-container">
                 <div class="filter-item">
                     <label for="date-after">Date After</label>
-                    <input type="date" id="date-after" value="${dateAfter}">
+                  <input type="date" id="date-after" value="${this.escapeHtml(dateAfter)}">
                 </div>
                 <div class="filter-item">
                     <label for="date-before">Date Before</label>
-                    <input type="date" id="date-before" value="${dateBefore}">
+                  <input type="date" id="date-before" value="${this.escapeHtml(dateBefore)}">
                 </div>
                 <div class="filter-item">
                     <label for="author">Author</label>
@@ -547,9 +659,9 @@ export class GitStatsWebView {
                         ${authors
                           .map(
                             (author) =>
-                              `<option value="${author}" ${
+                        `<option value="${this.escapeHtml(author)}" ${
                                 selectedAuthor === author ? "selected" : ""
-                              }>${author}</option>`
+                        }>${this.escapeHtml(author)}</option>`
                           )
                           .join("")}
                     </select>
@@ -596,9 +708,17 @@ export class GitStatsWebView {
             ${comparisonHtml}
             
             
-            <script>
+            <script nonce="${nonce}">
                 (function() {
                     const vscode = acquireVsCodeApi();
+                const state = ${this.safeJson(state)};
+
+                if (state.chartData && typeof Chart !== 'undefined') {
+                  const canvas = document.getElementById('stats-chart');
+                  if (canvas) {
+                    new Chart(canvas, state.chartData);
+                  }
+                }
                     
                     document.getElementById('apply-filters').addEventListener('click', () => {
                         const dateAfter = document.getElementById('date-after').value;
@@ -607,7 +727,7 @@ export class GitStatsWebView {
                         
                         vscode.postMessage({
                             command: 'filterChanged',
-                            statsCommand: '${statsCommand}',
+                    statsCommand: state.statsCommand,
                             dateAfter: dateAfter,
                             dateBefore: dateBefore,
                             author: author
@@ -618,7 +738,7 @@ export class GitStatsWebView {
                         vscode.postMessage({
                             command: 'export',
                             format: 'csv',
-                            title: '${title}',
+                        title: state.title,
                             data: document.getElementById('stats-content').innerHTML
                         });
                     });
@@ -627,7 +747,7 @@ export class GitStatsWebView {
                         vscode.postMessage({
                             command: 'export',
                             format: 'json',
-                            title: '${title}',
+                        title: state.title,
                             data: document.getElementById('stats-content').innerHTML
                         });
                     });
@@ -636,7 +756,7 @@ export class GitStatsWebView {
                         vscode.postMessage({
                             command: 'export',
                             format: 'html',
-                            title: '${title}',
+                        title: state.title,
                             data: document.getElementById('stats-content').innerHTML
                         });
                     });
@@ -663,7 +783,7 @@ export class GitStatsWebView {
                         vscode.postMessage({
                             command: 'saveConfiguration',
                             name: name,
-                            statsCommand: '${statsCommand}',
+                          statsCommand: state.statsCommand,
                             dateAfter: document.getElementById('date-after').value,
                             dateBefore: document.getElementById('date-before').value,
                             author: document.getElementById('author').value
